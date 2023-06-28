@@ -57,8 +57,8 @@ def start_tracker():
     return tracker
 
 
-frames_dir = "/home/walter/nas_cv/walter_stuff/od_video_skip_0"
-frames = glob.glob(f"{frames_dir}/*.jpg")
+frames_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images/076150982312/cam_5"
+frames = glob.glob(f"{frames_dir}/*.jpeg")
 frames = sorted(frames)
 
 first_frame = True
@@ -69,23 +69,25 @@ cv2.namedWindow("video", cv2.WND_PROP_FULLSCREEN)
 tracker_init = False 
 
 for frame in frames:
-    print(frame)
-    # img = cv2.imread(frame)
-    # bbox = []
-    # results = query_yolov5(frame)
-    # if len(results) == 1:
-    #     bbox, _, _, _ = parse_result_json(results[0])
-    #     tracker = start_tracker()
-    #     tracker.init(img, bbox)
-    #     tracker_init = True
-    # elif tracker_init:
-    #     outputs = tracker.track(img)
-    #     bbox = outputs['bbox']
+    # print(frame)
+    img = cv2.imread(frame)
+    bbox = []
+    results = query_yolov5(frame)
+    if len(results) == 1:
+        bbox, confidence, _, _ = parse_result_json(results[0])
+        tracker = start_tracker()
+        tracker.init(img, bbox)
+        tracker_init = True
+        print(confidence)
+    elif tracker_init:
+        outputs = tracker.track(img)
+        bbox = outputs['bbox']
+        print(outputs)
     
-    # if bbox:
-    #     bbox = list(map(int, bbox))
-    #     cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), green, thickness)
+    if bbox:
+        bbox = list(map(int, bbox))
+        cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), green, thickness)
 
-    # cv2.imshow("video", img)
-    # cv2.waitKey(40)
+    cv2.imshow("video", img)
+    cv2.waitKey(40)
 

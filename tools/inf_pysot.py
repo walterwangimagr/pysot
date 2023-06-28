@@ -57,7 +57,7 @@ def start_tracker():
     return tracker
 
 
-frames_dir = "/home/walter/nas_cv/walter_stuff/od_video_skip_0"
+frames_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images/076150982312/cam_0"
 frames = glob.glob(f"{frames_dir}/*.jpg")
 frames = sorted(frames)
 

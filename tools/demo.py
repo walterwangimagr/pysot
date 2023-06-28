@@ -91,7 +91,7 @@ def main():
             if 'polygon' in outputs:
                 polygon = np.array(outputs['polygon']).astype(np.int32)
                 cv2.polylines(frame, [polygon.reshape((-1, 1, 2))],
-                              True, (0, 255, 0), 3)
+                            True, (0, 255, 0), 3)
                 mask = ((outputs['mask'] > cfg.TRACK.MASK_THERSHOLD) * 255)
                 mask = mask.astype(np.uint8)
                 mask = np.stack([mask, mask*255, mask]).transpose(1, 2, 0)
@@ -99,8 +99,8 @@ def main():
             else:
                 bbox = list(map(int, outputs['bbox']))
                 cv2.rectangle(frame, (bbox[0], bbox[1]),
-                              (bbox[0]+bbox[2], bbox[1]+bbox[3]),
-                              (0, 255, 0), 3)
+                            (bbox[0]+bbox[2], bbox[1]+bbox[3]),
+                            (0, 255, 0), 3)
             cv2.imshow(video_name, frame)
             cv2.waitKey(40)
 

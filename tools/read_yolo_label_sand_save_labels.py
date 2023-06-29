@@ -4,23 +4,22 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
-import argparse
 import re
 
 import cv2
 import torch
-import numpy as np
 import glob
 
 from pysot.core.config import cfg
 from pysot.models.model_builder import ModelBuilder
 from pysot.tracker.tracker_builder import build_tracker
 
-from PIL import Image, ImageDraw
+from PIL import Image
 import requests
 import pickle
-import json
-import time 
+import json 
+
+torch.backends.cudnn.benchmark = True
 
 
 def query_yolov5(img_path):
@@ -156,10 +155,6 @@ def save_labels(save_dir, img_name, cls_id, normalized_bbox, confidence):
         str_to_save = f"{cls_id} {normalized_bbox[0]} {normalized_bbox[1]} {normalized_bbox[2]} {normalized_bbox[3]} {confidence}"
         f.write(str_to_save)
 
-# read bbox from label file instead of run inf 
-# img_path = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images/076150982312/cam_0/076150982312_0_cam_0_00003.jpeg"
-
-
 
 def normalized_bbox(bbox, img_sz):
     return list(map(lambda num: num / img_sz, bbox))
@@ -187,6 +182,8 @@ def run_per_folder(frames_dir, save_folder_name, read_label_from_files):
         # print(frame)
         img = cv2.imread(frame)
         bbox = []
+        cls_id = 0
+        confidence = 0
         if read_label_from_files:
             cls_ids, bboxs, confidences = read_img_yolo_label(frame)
         else:
@@ -199,10 +196,14 @@ def run_per_folder(frames_dir, save_folder_name, read_label_from_files):
             tracker.init(img, bbox)
             tracker_init = True
             color = green
+            cls_id = cls_ids[0]
+            confidence = confidences[0]
         elif tracker_init:
             outputs = tracker.track(img)
             bbox = outputs['bbox']
             color = red
+        
+        
         
         if bbox:
             bbox = list(map(int, bbox))
@@ -216,7 +217,7 @@ def run_per_folder(frames_dir, save_folder_name, read_label_from_files):
         cv2.imshow("video", img)
         cv2.waitKey(1)
 
-frames_dir = "/home/walter/big_daddy/nigel/hm01b0_data/imagr_store_OB_v2_270623/076150982312/101"
+frames_dir = "/home/walter/big_daddy/nigel/hm01b0_data/imagr_store_OB_v2_270623/076150982312/105"
 run_per_folder(frames_dir, "test", read_label_from_files=False)
 
 # base_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images"

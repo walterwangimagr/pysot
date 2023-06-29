@@ -16,6 +16,7 @@ from pysot.models.model_builder import ModelBuilder
 from pysot.tracker.tracker_builder import build_tracker
 
 torch.set_num_threads(1)
+torch.backends.cudnn.benchmark = True
 
 parser = argparse.ArgumentParser(description='tracking demo')
 parser.add_argument('--config', type=str, help='config file')
@@ -48,8 +49,7 @@ def get_frames(video_name):
                 break
     else:
         images = glob(os.path.join(video_name, '*.jp*'))
-        images = sorted(images,
-                        key=lambda x: int(x.split('/')[-1].split('.')[0]))
+        images = sorted(images)
         for img in images:
             frame = cv2.imread(img)
             yield frame
@@ -74,7 +74,7 @@ def main():
 
     first_frame = True
     if args.video_name:
-        video_name = args.video_name.split('/')[-1].split('.')[0]
+        video_name = "video"
     else:
         video_name = 'webcam'
     cv2.namedWindow(video_name, cv2.WND_PROP_FULLSCREEN)

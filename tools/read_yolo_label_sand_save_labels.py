@@ -104,9 +104,9 @@ def read_img_yolo_label(img_path):
 
 
 def start_tracker():
-    config_file = "/home/walter/nas_cv/walter_stuff/git/pysot/experiments/siamrpn_r50_l234_dwxcorr/config.yaml"
+    config_file = "/home/walter/nas_cv/walter_stuff/git/pysot/experiments/siammask_r50_l3/config.yaml"
     cfg.merge_from_file(config_file)
-    model_path = "/home/walter/nas_cv/walter_stuff/git/pysot/experiments/siamrpn_r50_l234_dwxcorr/model.pth"
+    model_path = "/home/walter/nas_cv/walter_stuff/git/pysot/experiments/siammask_r50_l3/model.pth"
     device = torch.device('cuda')
     model = ModelBuilder()
     model.load_state_dict(torch.load(model_path,
@@ -192,8 +192,9 @@ def run_per_folder(frames_dir, save_folder_name, read_label_from_files):
         
         if len(bboxs) == 1:
             bbox = scale_bbox(bboxs[0], 324)
+            xywh = xyxy_to_xywh(bbox)
             tracker = start_tracker()
-            tracker.init(img, bbox)
+            tracker.init(img, xywh)
             tracker_init = True
             color = green
             cls_id = cls_ids[0]
@@ -201,30 +202,39 @@ def run_per_folder(frames_dir, save_folder_name, read_label_from_files):
         elif tracker_init:
             outputs = tracker.track(img)
             bbox = outputs['bbox']
+            confidence = outputs['best_score']
+            bbox = xywh_to_xyxy(bbox)
             color = red
         
         
         
         if bbox:
             bbox = list(map(int, bbox))
+
+            # draw bbox and confidence 
             cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, thickness)
+            position = (100, 280)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 1
+            cv2.putText(img, str(confidence), position, font, font_scale, color, thickness)
+
+
+            # save label 
             n_bbox = normalized_bbox(bbox, 324)
-            cls_id = cls_id if cls_id else 0
-            confidence = confidence if confidence else 0.5
             save_dir = re.sub("/images", f"/{save_folder_name}", frames_dir)
             save_labels(save_dir, os.path.basename(frame), cls_id, n_bbox, confidence)
 
         cv2.imshow("video", img)
-        cv2.waitKey(1)
+        cv2.waitKey(100)
 
-frames_dir = "/home/walter/big_daddy/nigel/hm01b0_data/imagr_store_OB_v2_270623/076150982312/105"
+frames_dir = "/home/walter/git/pysot/data/images/076150982312/cam_7"
 run_per_folder(frames_dir, "test", read_label_from_files=False)
 
-# base_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images"
+# base_dir = "/home/walter/git/pysot/data/images"
 # barcodes = os.listdir(base_dir)
 # for barcode in barcodes:
 #     barcode_dir = os.path.join(base_dir, barcode)
 #     cams = os.listdir(barcode_dir)
 #     for cam in cams:
 #         cam_dir = os.path.join(barcode_dir, cam)
-#         run_per_folder(cam_dir)
+#         run_per_folder(cam_dir, 'simple', True)

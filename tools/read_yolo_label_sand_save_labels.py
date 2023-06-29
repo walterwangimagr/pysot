@@ -33,16 +33,75 @@ def query_yolov5(img_path):
     return json.loads(results['results'])
 
 
-def parse_result_json(result):
-    xmin = result['xmin']
-    ymin = result['ymin']
-    xmax = result['xmax']
-    ymax = result['ymax']
-    confidence = result['confidence']
-    class_id = result['class']
-    class_name = result['name']
-    xyxy_bbox = [xmin, ymin, xmax, ymax]
-    return xyxy_bbox, confidence, class_id, class_name
+def parse_result_json(results):
+    """parse the json result from inference 
+
+    Args:
+        results (list of dict): list of detected objects 
+
+    Returns:
+        bboxs: list of bbox, xyxy normalized form
+        cls_ids: list of class id 
+        confidences: list of confidence
+    """
+    bboxs = []
+    confidences = []
+    cls_ids = []
+
+    for result in results:
+        xmin = result['xmin']
+        ymin = result['ymin']
+        xmax = result['xmax']
+        ymax = result['ymax']
+        confidence = result['confidence']
+        cls_id = result['class']
+        bbox = [xmin, ymin, xmax, ymax]
+        bbox = normalized_bbox(bbox, 324)
+        
+        bboxs.append(bbox)
+        confidences.append(confidence)
+        cls_ids.append(cls_id)
+    
+    return cls_ids, bboxs, confidences
+
+
+def read_img_yolo_label(img_path):
+    """read labels file based on path of image file 
+    if ~/images/xx/xx/xx.jpg then the labels file locate in 
+    ~/auto-labels-yolov5/xx/xx/xx.txt
+
+    Args:
+        img_path : path of image file 
+
+    Returns:
+        bboxs: list of bbox, xyxy normalized form
+        cls_ids: list of class id 
+        confidences: list of confidence
+    """
+    label_path = re.sub("images", "auto-labels-yolov5", img_path)
+    label_path = re.sub(".jp.+", ".txt", label_path)
+    bboxs = []
+    cls_ids = []
+    confidences = []
+    with open(label_path, "r") as f:
+        for line in f:
+            content = line.strip().split()
+            content = list(map(float,content))
+            if len(content) == 6:
+                cls_id = content[0]
+                x = content[1]
+                y = content[2]
+                w = content[3]
+                h = content[4]
+                xmin = x - w / 2
+                ymin = y - h / 2
+                confidence = content[5]
+                bbox = [xmin, ymin, w, h]
+                bbox = xywh_to_xyxy(bbox)
+                bboxs.append(bbox)
+                cls_ids.append(cls_id)
+                confidences.append(confidence)
+    return cls_ids, bboxs, confidences
 
 
 def start_tracker():
@@ -89,7 +148,7 @@ def save_labels(save_dir, img_name, cls_id, normalized_bbox, confidence):
     save xyxy bbox to xywh yolo format
     """
     os.makedirs(save_dir, exist_ok=True)
-    label_name = re.sub(".jpeg", ".txt", img_name)
+    label_name = re.sub(".jp.+", ".txt", img_name)
     savePath = os.path.join(save_dir, label_name)
     normalized_bbox = xyxy_to_xywh(normalized_bbox)
     
@@ -98,56 +157,73 @@ def save_labels(save_dir, img_name, cls_id, normalized_bbox, confidence):
         f.write(str_to_save)
 
 # read bbox from label file instead of run inf 
-img_path = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images/076150982312/cam_0/076150982312_0_cam_0_00003.jpeg"
-def read_img_yolo_label(img_path):
-    label_path = re.sub("images", "auto-labels-yolov5", img_path)
-    label_path = re.sub(".jpeg", ".txt", label_path)
-    with open(label_path, "r") as f:
-        content = f.readline().split()
-        cls_id = content[0]
-        xmin = content[1]
-        ymin = content[2]
-        w = content[3]
-        h = content[4]
-        confidence = content[5]
-    
-    bbox = [xmin, ymin, w, h]
-    bbox = xywh_to_xyxy(list(map(float,bbox)))
-    return cls_id, bbox, confidence
-
-print(read_img_yolo_label(img_path))
-# for each folder, each camera 
+# img_path = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images/076150982312/cam_0/076150982312_0_cam_0_00003.jpeg"
 
 
-# frames_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images/076150982312/cam_5"
-# frames = glob.glob(f"{frames_dir}/*.jpeg")
-# frames = sorted(frames)
 
-# first_frame = True
-# green = (0, 255, 0)
-# thickness = 2
-# cv2.namedWindow("video", cv2.WND_PROP_FULLSCREEN)
+def normalized_bbox(bbox, img_sz):
+    return list(map(lambda num: num / img_sz, bbox))
 
-# tracker_init = False 
 
-# for frame in frames:
-#     # print(frame)
-#     img = cv2.imread(frame)
-#     bbox = []
-#     results = query_yolov5(frame)
-#     if len(results) == 1:
-#         bbox, confidence, _, _ = parse_result_json(results[0])
-#         tracker = start_tracker()
-#         tracker.init(img, bbox)
-#         tracker_init = True
-#     elif tracker_init:
-#         outputs = tracker.track(img)
-#         bbox = outputs['bbox']
-    
-#     if bbox:
-#         bbox = list(map(int, bbox))
-#         cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), green, thickness)
+def scale_bbox(n_bbox, img_sz):
+    bbox = list(map(lambda num: num * img_sz, n_bbox))
+    return list(map(int, bbox))
 
-#     cv2.imshow("video", img)
-#     cv2.waitKey(40)
 
+
+# for each folder, each camera
+def run_per_folder(frames_dir, save_folder_name, read_label_from_files):
+    frames = glob.glob(f"{frames_dir}/*.jp*")
+    frames = sorted(frames)
+
+    green = (0, 255, 0)
+    red = (0, 0, 255)
+    thickness = 2
+    cv2.namedWindow("video", cv2.WND_PROP_FULLSCREEN)
+
+    tracker_init = False 
+
+    for frame in frames:
+        # print(frame)
+        img = cv2.imread(frame)
+        bbox = []
+        if read_label_from_files:
+            cls_ids, bboxs, confidences = read_img_yolo_label(frame)
+        else:
+            results = query_yolov5(frame)
+            cls_ids, bboxs, confidences = parse_result_json(results)
+        
+        if len(bboxs) == 1:
+            bbox = scale_bbox(bboxs[0], 324)
+            tracker = start_tracker()
+            tracker.init(img, bbox)
+            tracker_init = True
+            color = green
+        elif tracker_init:
+            outputs = tracker.track(img)
+            bbox = outputs['bbox']
+            color = red
+        
+        if bbox:
+            bbox = list(map(int, bbox))
+            cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, thickness)
+            n_bbox = normalized_bbox(bbox, 324)
+            cls_id = cls_id if cls_id else 0
+            confidence = confidence if confidence else 0.5
+            save_dir = re.sub("/images", f"/{save_folder_name}", frames_dir)
+            save_labels(save_dir, os.path.basename(frame), cls_id, n_bbox, confidence)
+
+        cv2.imshow("video", img)
+        cv2.waitKey(1)
+
+frames_dir = "/home/walter/big_daddy/nigel/hm01b0_data/imagr_store_OB_v2_270623/076150982312/101"
+run_per_folder(frames_dir, "test", read_label_from_files=False)
+
+# base_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images"
+# barcodes = os.listdir(base_dir)
+# for barcode in barcodes:
+#     barcode_dir = os.path.join(base_dir, barcode)
+#     cams = os.listdir(barcode_dir)
+#     for cam in cams:
+#         cam_dir = os.path.join(barcode_dir, cam)
+#         run_per_folder(cam_dir)

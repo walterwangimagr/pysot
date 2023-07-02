@@ -3,11 +3,8 @@ import pickle
 from PIL import Image 
 import cv2 
 
-server_base = "http://127.0.0.1:5500"
+img = cv2.imread("/home/walter/git/pysot/data/OB_walter/012993112059/100/00_0001.jpg")
+region = cv2.selectROI("frame", img, False, False)
+print(region)
 
-img_path = "/home/walter/nas_cv/walter_stuff/od_video_skip_0/0020.jpg"
-img = cv2.imread(img_path)
-
-
-bbox = cv2.selectROI("test", img, False, False)
-print(bbox)
+region = [35, 35, 245, 245]

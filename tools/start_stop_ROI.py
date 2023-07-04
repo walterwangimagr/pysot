@@ -244,6 +244,12 @@ def bbox_within_region_of_interest(bbox, roi=[35,35,245,245]):
     return roi_xmin <= x_center and x_center <= roi_xmax and roi_ymin <= y_center and y_center <= roi_ymax
 
 
+def large_bbox(bbox, im_w=324, im_h=324):
+    xmin, ymin, xmax, ymax = bbox
+    w = xmax - xmin
+    h = ymax - ymin 
+    return w >= im_w / 2 or h >= im_h / 2
+
 # for each folder, each camera
 def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
     frames = get_frames(frames_dir)
@@ -270,10 +276,10 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
         if len(bboxs) == 1:
             bbox = scale_bbox(bboxs[0], 324)
             confidence = confidences[0]
-            if bbox_within_region_of_interest(bbox) and not bbox_reach_edge(bbox) and confidence > 0.8:
+            if (bbox_within_region_of_interest(bbox) and not bbox_reach_edge(bbox) and confidence > 0.8) or (large_bbox(bbox) and confidence > 0.5):
                 use_od = True
         
-        if not use_od and tracker_init and use_tracker_counter <= 3:
+        if not use_od and tracker_init:
             use_tracker = True
         
         if use_od:
@@ -284,21 +290,18 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
             color = (0, 255, 0)
             cls_id = cls_ids[0]
             confidence = confidences[0]
-            use_tracker_counter = 0
         
         if use_tracker:
-            use_tracker_counter += 1
             outputs = tracker.track(img)
             bbox = outputs['bbox']
             confidence = outputs['best_score']
             bbox = xywh_to_xyxy(bbox)
             color = (0, 0, 255)
-            if bbox_reach_edge(bbox):
+            if bbox_reach_edge(bbox) or confidence > 0.9:
                 tracker_init = False
 
         if not use_od and not use_tracker:
             bbox = []
-            use_tracker_counter = 0
             tracker_init = False
         
         
@@ -313,7 +316,7 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
 
 
 frames_dir = "/home/walter/git/pipeline/models/data_imagr/images/OD_instore_090623_testset"
-frames_dir = "/home/walter/git/pysot/data/OB_walter/9556001171290/100"
+frames_dir = "/home/walter/big_daddy/nigel/hm01b0_data/imagr_store_OB_v2_270623/076150982312/107"
 label_save_dir = "/home/walter/git/pysot/data/test/test"
 imgs = run_per_folder(frames_dir, label_save_dir=None, read_label_from_files=False)
 print(len(imgs))

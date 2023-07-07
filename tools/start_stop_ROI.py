@@ -198,11 +198,6 @@ def draw_bbox_confidence(img, bbox, confidence, color=(0,255,0)):
         cv2.putText(img, str(confidence), position, font, font_scale, color, thickness)
 
 
-def get_frames(frames_dir):
-    frames = glob.glob(f"{frames_dir}/*.jp*")
-    return sorted(frames)
-
-
 def calculate_iou(box1, box2):
     box1_xmin, box1_ymin, box1_xmax, box1_ymax = box1
     box2_xmin, box2_ymin, box2_xmax, box2_ymax = box2
@@ -229,7 +224,7 @@ def calculate_iou(box1, box2):
     return iou
 
 
-def bbox_reach_edge(bbox, edge=[5,5,320,320]):
+def bbox_reach_edge(bbox, edge=[10,10,314,314]):
     # bbox is xyxy and scaled 
     xmin, ymin, xmax, ymax = bbox
     edge_xmin, edge_ymin, edge_xmax, edge_ymax = edge
@@ -248,7 +243,14 @@ def large_bbox(bbox, im_w=324, im_h=324):
     xmin, ymin, xmax, ymax = bbox
     w = xmax - xmin
     h = ymax - ymin 
-    return w >= im_w / 2 or h >= im_h / 2
+    # 324 * 324 / 6 = 17496
+    return w * h >= 17496
+
+
+def get_frames(frames_dir):
+    frames = glob.glob(f"{frames_dir}/*.jp*")
+    return sorted(frames)
+
 
 # for each folder, each camera
 def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
@@ -276,7 +278,7 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
         if len(bboxs) == 1:
             bbox = scale_bbox(bboxs[0], 324)
             confidence = confidences[0]
-            if (bbox_within_region_of_interest(bbox) and not bbox_reach_edge(bbox) and confidence > 0.8) or (large_bbox(bbox) and confidence > 0.5):
+            if (bbox_within_region_of_interest(bbox) and not bbox_reach_edge(bbox) and confidence > 0.6) or (large_bbox(bbox) and confidence > 0.4):
                 use_od = True
         
         if not use_od and tracker_init:
@@ -297,7 +299,8 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
             confidence = outputs['best_score']
             bbox = xywh_to_xyxy(bbox)
             color = (0, 0, 255)
-            if bbox_reach_edge(bbox) or confidence > 0.9:
+            if bbox_reach_edge(bbox) or confidence < 0.9:
+                bbox = []
                 tracker_init = False
 
         if not use_od and not use_tracker:
@@ -314,11 +317,48 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
     return processed_frames
 
 
+def run_with_od(frames_dir):
+    frames = get_frames(frames_dir)
+    processed_frames = []
+    for frame in frames:
+        img = cv2.imread(frame)
+        bbox = []
+        cls_id = 0
+        confidence = 0
+        color = (0, 255, 0)
+        results = query_yolov5(frame)
+        cls_ids, bboxs, confidences = parse_result_json(results)
+        
+        for i in range(len(bboxs)):
+            bbox = bboxs[i]
+            cls_id = cls_ids[i]
+            confidence = confidences[i]
+            bbox = scale_bbox(bbox, 324)
+            if confidence > 0.8:
+                draw_bbox_confidence(img, bbox, confidence, color=color)
 
-frames_dir = "/home/walter/git/pipeline/models/data_imagr/images/OD_instore_090623_testset"
-frames_dir = "/home/walter/big_daddy/nigel/hm01b0_data/imagr_store_OB_v2_270623/076150982312/107"
-label_save_dir = "/home/walter/git/pysot/data/test/test"
-imgs = run_per_folder(frames_dir, label_save_dir=None, read_label_from_files=False)
+        processed_frames.append(img)
+    
+    return processed_frames
+
+
+
+# base_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images"
+# save_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/ROI"
+
+
+# barcodes = os.listdir(base_dir)
+# for barcode in barcodes:
+#     barcode_dir = os.path.join(base_dir, barcode)
+#     cams = os.listdir(barcode_dir)
+#     for cam in cams:
+#         cam_dir = os.path.join(barcode_dir, cam)
+#         label_save_dir = os.path.join(save_dir, barcode, cam)
+#         imgs = run_per_folder(cam_dir, label_save_dir=label_save_dir, read_label_from_files=False)
+
+frame_dir = "/home/walter/git/pipeline/models/data_imagr/images/full_of_prods_dylan_desk/8"
+# imgs = run_per_folder(frame_dir, label_save_dir=None, read_label_from_files=False)
+imgs = run_with_od(frame_dir)
 print(len(imgs))
 debug(imgs)
 

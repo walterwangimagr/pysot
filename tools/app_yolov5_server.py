@@ -5,7 +5,7 @@ import pickle
 
 app = Flask(__name__)
 
-micro = "/home/walter/nas_cv/walter_stuff/git/yolov5-master/micro_controller/micro_controller/weights/best.pt"
+micro = "/home/walter/nas_cv/walter_stuff/git/yolov5-master/od_no_skip/od_no_skip2/weights/best.pt"
 model = torch.hub.load('ultralytics/yolov5', 'custom', micro)
 
 

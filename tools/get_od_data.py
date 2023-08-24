@@ -27,7 +27,7 @@ def query_yolov5(img_path):
     img = Image.open(img_path)
     headers = {'Content-Type': 'application/octet-stream'}
     response = requests.post(f"{server_base}/infer",
-                            data=pickle.dumps(img), headers=headers)
+                             data=pickle.dumps(img), headers=headers)
     results = response.json()
     return json.loads(results['results'])
 
@@ -142,15 +142,9 @@ def xywh_to_xyxy(xywh_bbox):
     return [xmin, ymin, xmax, ymax]
 
 # write yolo label label, xywh normalized form 
-def save_labels(label_save_dir, img_name, cls_id, bbox, confidence):
-    """
-    save xyxy bbox to xywh yolo format
-    """
-    os.makedirs(label_save_dir, exist_ok=True)
-    label_name = re.sub(".jp.+", ".txt", img_name)
-    savePath = os.path.join(label_save_dir, label_name)
+def save_labels(label_save_path, cls_id, bbox, confidence):
 
-    with open(savePath, 'w') as f:
+    with open(label_save_path, 'w') as f:
         if bbox:
             n_bbox = normalized_bbox(bbox, 324)
             n_bbox = xyxy_to_xywh(n_bbox)
@@ -248,12 +242,18 @@ def large_bbox(bbox, im_w=324, im_h=324):
 
 
 def get_frames(frames_dir):
-    frames = list(sorted(glob.glob(f"{frames_dir}/*/*.jp*")))
-    return frames
+    frames = glob.glob(f"{frames_dir}/*.jp*")
+    return sorted(frames)
 
+
+def save_inf_result(img_path, img):
+    save_path = re.sub("/images", "/tracker_results", img_path)
+    parent_dir = os.path.dirname(save_path)
+    os.makedirs(parent_dir, exist_ok=True)
+    cv2.imwrite(save_path, img)
 
 # for each folder, each camera
-def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
+def run_per_folder(frames_dir, label_save_dir, read_label_from_files):
     frames = get_frames(frames_dir)
     processed_frames = []
     tracker_init = False 
@@ -270,7 +270,6 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
             cls_ids, bboxs, confidences = read_img_yolo_label(frame)
         else:
             results = query_yolov5(frame)
-            print(results)
             cls_ids, bboxs, confidences = parse_result_json(results)
 
         use_od = False
@@ -279,7 +278,7 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
         if len(bboxs) == 1:
             bbox = scale_bbox(bboxs[0], 324)
             confidence = confidences[0]
-            if (bbox_within_region_of_interest(bbox) and not bbox_reach_edge(bbox) and confidence > 0.6) or (large_bbox(bbox) and confidence > 0.4):
+            if confidence > 0.65:
                 use_od = True
         
         if not use_od and tracker_init:
@@ -304,20 +303,22 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
                 bbox = []
                 tracker_init = False
 
+
         if not use_od and not use_tracker:
             bbox = []
             tracker_init = False
         
-        
-        draw_bbox_confidence(img, bbox, confidence, color=color)
-        if label_save_dir:
-            save_labels(label_save_dir, os.path.basename(frame), cls_id, bbox, confidence)
 
-        processed_frames.append(img)
-        basename = os.path.basename(frame)
-        cam = basename.split("_")[3]
-        os.makedirs(os.path.join("/home/walter/crop", cam), exist_ok=True)
-        cv2.imwrite(os.path.join("/home/walter/crop", cam, basename), img)
+        if bbox:
+            draw_bbox_confidence(img, bbox, confidence, color=color)
+            label_save_path = re.sub("/images", "/labels", frame)
+            label_save_path = re.sub(".jpg", ".txt", label_save_path)
+            parent_dir = os.path.dirname(label_save_path)
+            os.makedirs(parent_dir, exist_ok=True)
+            save_labels(label_save_path, cls_id, bbox, confidence)
+            save_inf_result(frame, img)
+
+        # processed_frames.append(img)
 
     return processed_frames
 
@@ -348,27 +349,12 @@ def run_with_od(frames_dir):
 
 
 
-# base_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images"
-# save_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/ROI"
+base_dir = "/home/walter/git/pipeline/models/data_imagr/images/od_skip_0/"
+for dataset in os.listdir(base_dir):
+    frame_dir = os.path.join(base_dir, dataset)
+    print(frame_dir)
+    imgs = run_per_folder(frame_dir, label_save_dir=None, read_label_from_files=False)
 
-
-# barcodes = os.listdir(base_dir)
-# for barcode in barcodes:
-#     barcode_dir = os.path.join(base_dir, barcode)
-#     cams = os.listdir(barcode_dir)
-#     for cam in cams:
-#         cam_dir = os.path.join(barcode_dir, cam)
-#         label_save_dir = os.path.join(save_dir, barcode, cam)
-#         imgs = run_per_folder(cam_dir, label_save_dir=label_save_dir, read_label_from_files=False)
-
-frame_dir = "/home/walter/big_daddy/onboard_jpg/9002490243319/"
-label_save_dir = "/home/walter/crop"
-
-# os.makedirs(label_save_dir, exist_ok=True)
-# imgs = run_per_folder(frame_dir, label_save_dir=None, read_label_from_files=False)
-# # imgs = run_with_od(frame_dir)
-# print(len(imgs))
-# debug(imgs)
 
 
 

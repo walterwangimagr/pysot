@@ -5,7 +5,8 @@ import pickle
 
 app = Flask(__name__)
 
-micro = "/home/walter/nas_cv/walter_stuff/git/yolov5-master/od_no_skip/od_no_skip2/weights/best.pt"
+micro = "/home/walter/nas_cv/walter_stuff/git/yolov5-master/od_no_skip/od_no_skip3/weights/best.pt"
+micro = "/home/walter/nas_cv/walter_stuff/git/yolov5-master/new_office_onboard/new_office_onboard2/weights/best.pt"
 model = torch.hub.load('ultralytics/yolov5', 'custom', micro)
 
 
@@ -24,4 +25,4 @@ def infer():
     
     
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5500)
+    app.run(host="0.0.0.0", port=5800)

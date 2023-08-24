@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 
 import os
 import re
+import multiprocessing as mp
 
 import cv2
 import torch
@@ -23,7 +24,7 @@ torch.backends.cudnn.benchmark = True
 
 
 def query_yolov5(img_path):
-    server_base = "http://127.0.0.1:5500"
+    server_base = "http://127.0.0.1:5800"
     img = Image.open(img_path)
     headers = {'Content-Type': 'application/octet-stream'}
     response = requests.post(f"{server_base}/infer",
@@ -133,12 +134,12 @@ def xywh_to_xyxy(xywh_bbox):
     """
     xmin ymin w h to xmin ymin xmax ymax 
     """
-    xmin = xywh_bbox[0]
-    ymin = xywh_bbox[1]
-    w = xywh_bbox[2]
-    h = xywh_bbox[3]
-    xmax = xmin + w
-    ymax = ymin + h
+    xmin = int(xywh_bbox[0])
+    ymin = int(xywh_bbox[1])
+    w = int(xywh_bbox[2])
+    h = int(xywh_bbox[3])
+    xmax = int(xmin + w)
+    ymax = int(ymin + h)
     return [xmin, ymin, xmax, ymax]
 
 # write yolo label label, xywh normalized form 
@@ -248,30 +249,28 @@ def large_bbox(bbox, im_w=324, im_h=324):
 
 
 def get_frames(frames_dir):
-    frames = list(sorted(glob.glob(f"{frames_dir}/*/*.jp*")))
+    frames = list(sorted(glob.glob(f"{frames_dir}/*.jp*")))
     return frames
 
 
 # for each folder, each camera
-def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
-    frames = get_frames(frames_dir)
-    processed_frames = []
+def run_per_folder(frames_dir, barcode, cam, save_dir):
+    src_dir = os.path.join(frames_dir, barcode, cam)
+    frames = get_frames(src_dir)
+    dst_dir = os.path.join(save_dir, barcode, cam)
+    os.makedirs(dst_dir, exist_ok=True)
+    
     tracker_init = False 
-    use_tracker_counter = 0
+    
 
     for frame in frames:
         img = cv2.imread(frame)
         bbox = []
-        cls_id = 0
         confidence = 0
-        color = (0, 255, 0)
-
-        if read_label_from_files:
-            cls_ids, bboxs, confidences = read_img_yolo_label(frame)
-        else:
-            results = query_yolov5(frame)
-            print(results)
-            cls_ids, bboxs, confidences = parse_result_json(results)
+        
+        results = query_yolov5(frame)
+        print(results)
+        cls_ids, bboxs, confidences = parse_result_json(results)
 
         use_od = False
         use_tracker = False
@@ -290,8 +289,6 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
             tracker = start_tracker()
             tracker.init(img, xywh)
             tracker_init = True
-            color = (0, 255, 0)
-            cls_id = cls_ids[0]
             confidence = confidences[0]
         
         if use_tracker:
@@ -299,7 +296,6 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
             bbox = outputs['bbox']
             confidence = outputs['best_score']
             bbox = xywh_to_xyxy(bbox)
-            color = (0, 0, 255)
             if bbox_reach_edge(bbox) or confidence < 0.9:
                 bbox = []
                 tracker_init = False
@@ -307,68 +303,45 @@ def run_per_folder(frames_dir, label_save_dir , read_label_from_files):
         if not use_od and not use_tracker:
             bbox = []
             tracker_init = False
-        
-        
-        draw_bbox_confidence(img, bbox, confidence, color=color)
-        if label_save_dir:
-            save_labels(label_save_dir, os.path.basename(frame), cls_id, bbox, confidence)
 
-        processed_frames.append(img)
-        basename = os.path.basename(frame)
-        cam = basename.split("_")[3]
-        os.makedirs(os.path.join("/home/walter/crop", cam), exist_ok=True)
-        cv2.imwrite(os.path.join("/home/walter/crop", cam, basename), img)
-
-    return processed_frames
-
-
-def run_with_od(frames_dir):
-    frames = get_frames(frames_dir)
-    processed_frames = []
-    for frame in frames:
-        img = cv2.imread(frame)
-        bbox = []
-        cls_id = 0
-        confidence = 0
-        color = (0, 255, 0)
-        results = query_yolov5(frame)
-        cls_ids, bboxs, confidences = parse_result_json(results)
-        
-        for i in range(len(bboxs)):
-            bbox = bboxs[i]
-            cls_id = cls_ids[i]
-            confidence = confidences[i]
-            bbox = scale_bbox(bbox, 324)
-            if confidence > 0.8:
-                draw_bbox_confidence(img, bbox, confidence, color=color)
-
-        processed_frames.append(img)
-    
-    return processed_frames
+        if bbox:
+            print(bbox)
+            basename = os.path.basename(frame)
+            dst = os.path.join(dst_dir, basename)
+            crop = img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+            cv2.imwrite(dst, crop)
 
 
 
-# base_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/images"
-# save_dir = "/home/walter/nas_cv/walter_stuff/git/pysot/data/ROI"
 
 
-# barcodes = os.listdir(base_dir)
+
+# barcodes = os.listdir(frame_dir)
 # for barcode in barcodes:
-#     barcode_dir = os.path.join(base_dir, barcode)
-#     cams = os.listdir(barcode_dir)
+#     cams = os.listdir(os.path.join(frame_dir, barcode))
 #     for cam in cams:
-#         cam_dir = os.path.join(barcode_dir, cam)
-#         label_save_dir = os.path.join(save_dir, barcode, cam)
-#         imgs = run_per_folder(cam_dir, label_save_dir=label_save_dir, read_label_from_files=False)
+#         pool.apply_async(run_per_folder, args=(frame_dir, barcode, cam, save_dir))
+#         # run_per_folder(frame_dir, barcode, cam, save_dir)
 
-frame_dir = "/home/walter/big_daddy/onboard_jpg/9002490243319/"
-label_save_dir = "/home/walter/crop"
 
-# os.makedirs(label_save_dir, exist_ok=True)
-# imgs = run_per_folder(frame_dir, label_save_dir=None, read_label_from_files=False)
-# # imgs = run_with_od(frame_dir)
-# print(len(imgs))
-# debug(imgs)
 
+
+MAX_NUM_CORES = mp.cpu_count()
+pool = mp.Pool(4)
+
+# run_per_folder(frame_dir, barcode, cam, save_dir)
+
+frame_dir = "/home/walter/big_daddy/onboard_jpg/"
+save_dir = "/home/walter/big_daddy/onboard_crops/"
+os.makedirs(save_dir, exist_ok=True)
+
+barcodes_file = "/home/walter/git/pysot/barcode_p4_1.txt"
+with open(barcodes_file, 'r') as f:
+    lines = f.readlines()
+    for line in lines:
+        barcode = line.strip()
+        cams = os.listdir(os.path.join(frame_dir, barcode))
+        for cam in cams:
+            run_per_folder(frame_dir, barcode, cam, save_dir)
 
 
